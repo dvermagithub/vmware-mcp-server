@@ -19,6 +19,7 @@ import monitoring
 import host_info
 import maintenance
 import connection
+import guest_ops
 
 # Load .env from the repo root (one level up from mcp-server/)
 env_path = Path(__file__).parent.parent / ".env"
@@ -158,6 +159,40 @@ def execute_power_down_sequence(instance: Optional[str] = None) -> str:
 def execute_power_up_sequence(instance: Optional[str] = None) -> str:
     """Execute the power-up sequence based on maintenance instructions. Optionally target a specific vCenter instance."""
     return maintenance.execute_power_up_sequence(instance)
+
+# Guest Operations Tools
+@mcp.tool()
+def run_in_guest_via_vix(
+    vm_name: str,
+    script_path: str,
+    args: str = "",
+    guest_username: Optional[str] = None,
+    guest_password: Optional[str] = None,
+    guest_profile: Optional[str] = None,
+    fetch_log: bool = True,
+    timeout_seconds: int = 1800,
+    instance: Optional[str] = None,
+) -> str:
+    """Upload and run a local .ps1 or .sh script inside a VMware guest via the
+    vCenter Guest Operations API (no SSH/WinRM/PSExec). Requires VMware Tools
+    running in the guest plus a privileged guest OS account (Administrator on
+    Windows, root/sudoer on Linux). Guest creds are taken from
+    guest_username/guest_password if provided, otherwise from .env
+    (GUEST_USERNAME_WINDOWS/_LINUX or _<PROFILE> variants). When fetch_log is
+    true, the function tries to pull back the Zerto migration prep
+    last-run-summary.json (Windows) or log dir (Linux). Optionally target a
+    specific vCenter instance."""
+    return guest_ops.run_in_guest_via_vix(
+        vm_name=vm_name,
+        script_path=script_path,
+        args=args,
+        guest_username=guest_username,
+        guest_password=guest_password,
+        guest_profile=guest_profile,
+        fetch_log=fetch_log,
+        timeout_seconds=timeout_seconds,
+        instance=instance,
+    )
 
 if __name__ == "__main__":
     import os
