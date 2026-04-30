@@ -4,13 +4,14 @@ Monitoring Module for VMware MCP Server
 Handles VM and host metrics collection using pyVmomi
 """
 
+from typing import Optional
 from pyVmomi import vim
 import connection
 
 
-def get_vm_performance(vm_name: str) -> str:
+def get_vm_performance(vm_name: str, instance: Optional[str] = None) -> str:
     """Get detailed performance metrics for a specific VM."""
-    service_instance = connection.get_service_instance()
+    service_instance = connection.get_service_instance(instance)
     if not service_instance:
         return "Error: Could not connect to vCenter"
     
@@ -143,9 +144,9 @@ def get_vm_performance(vm_name: str) -> str:
         return f"Error getting performance data: {e}"
 
 
-def get_host_performance(host_name: str) -> str:
+def get_host_performance(host_name: str, instance: Optional[str] = None) -> str:
     """Get detailed performance metrics for a specific host."""
-    service_instance = connection.get_service_instance()
+    service_instance = connection.get_service_instance(instance)
     if not service_instance:
         return "Error: Could not connect to vCenter"
     
@@ -276,9 +277,9 @@ def get_host_performance(host_name: str) -> str:
         return f"Error getting performance data: {e}"
 
 
-def list_performance_counters() -> str:
+def list_performance_counters(instance: Optional[str] = None) -> str:
     """List available performance counters."""
-    service_instance = connection.get_service_instance()
+    service_instance = connection.get_service_instance(instance)
     if not service_instance:
         return "Error: Could not connect to vCenter"
     
@@ -317,9 +318,9 @@ def list_performance_counters() -> str:
         return f"Error listing performance counters: {e}"
 
 
-def get_vm_summary_stats() -> str:
+def get_vm_summary_stats(instance: Optional[str] = None) -> str:
     """Get summary statistics for all VMs."""
-    service_instance = connection.get_service_instance()
+    service_instance = connection.get_service_instance(instance)
     if not service_instance:
         return "Error: Could not connect to vCenter"
     
@@ -366,9 +367,9 @@ def get_vm_summary_stats() -> str:
         return f"Error getting VM summary stats: {e}"
 
 
-def debug_vm_performance_raw(vm_name: str) -> str:
+def debug_vm_performance_raw(vm_name: str, instance: Optional[str] = None) -> str:
     """Debug function to show raw VMware performance data."""
-    service_instance = connection.get_service_instance()
+    service_instance = connection.get_service_instance(instance)
     if not service_instance:
         return "Error: Could not connect to vCenter"
     

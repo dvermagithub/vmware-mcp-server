@@ -4,13 +4,14 @@ Host Information Module for VMware MCP Server
 Handles detailed information about physical hosts/rack servers
 """
 
+from typing import Optional
 from pyVmomi import vim
 import connection
 
 
-def list_hosts() -> str:
+def list_hosts(instance: Optional[str] = None) -> str:
     """List all physical hosts with basic information."""
-    service_instance = connection.get_service_instance()
+    service_instance = connection.get_service_instance(instance)
     if not service_instance:
         return "Error: Could not connect to vCenter"
     
@@ -44,9 +45,9 @@ def list_hosts() -> str:
         return f"Error: {e}"
 
 
-def get_host_details(host_name: str) -> str:
+def get_host_details(host_name: str, instance: Optional[str] = None) -> str:
     """Get detailed information about a specific physical host."""
-    service_instance = connection.get_service_instance()
+    service_instance = connection.get_service_instance(instance)
     if not service_instance:
         return "Error: Could not connect to vCenter"
     
@@ -188,9 +189,9 @@ def get_host_details(host_name: str) -> str:
         return f"Error: {e}"
 
 
-def get_host_performance_metrics(host_name: str) -> str:
+def get_host_performance_metrics(host_name: str, instance: Optional[str] = None) -> str:
     """Get detailed performance metrics for a specific host."""
-    service_instance = connection.get_service_instance()
+    service_instance = connection.get_service_instance(instance)
     if not service_instance:
         return "Error: Could not connect to vCenter"
     
@@ -301,9 +302,9 @@ def get_host_performance_metrics(host_name: str) -> str:
         return f"Error getting host performance: {e}"
 
 
-def get_host_hardware_health(host_name: str) -> str:
+def get_host_hardware_health(host_name: str, instance: Optional[str] = None) -> str:
     """Get hardware health information for a specific host."""
-    service_instance = connection.get_service_instance()
+    service_instance = connection.get_service_instance(instance)
     if not service_instance:
         return "Error: Could not connect to vCenter"
     

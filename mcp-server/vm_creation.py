@@ -4,6 +4,7 @@ VM Creation Module for VMware MCP Server
 Handles VM creation from templates with customization
 """
 
+from typing import Optional
 from pyVmomi import vim
 import connection
 
@@ -172,12 +173,13 @@ def validate_resources(template, datastore, network, resource_pool, template_nam
     return None  # All resources found
 
 
-def create_vm_custom(template_name: str, new_vm_name: str, ip_address: str = "192.168.1.100", 
-                    netmask: str = "255.255.255.0", gateway: str = "192.168.1.1", 
-                    memory_gb: int = 4, cpu_count: int = 2, disk_gb: int = 50, 
-                    network_name: str = "VM Network", datastore_name: str = "datastore1") -> str:
+def create_vm_custom(template_name: str, new_vm_name: str, ip_address: str = "192.168.1.100",
+                    netmask: str = "255.255.255.0", gateway: str = "192.168.1.1",
+                    memory_gb: int = 4, cpu_count: int = 2, disk_gb: int = 50,
+                    network_name: str = "VM Network", datastore_name: str = "datastore1",
+                    instance: Optional[str] = None) -> str:
     """Create a new VM from template with comprehensive customization (memory, CPU, disk, IP) - powered off by default."""
-    service_instance = connection.get_service_instance()
+    service_instance = connection.get_service_instance(instance)
     if not service_instance:
         return "Error: Could not connect to vCenter"
     

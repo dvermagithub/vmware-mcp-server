@@ -5,7 +5,7 @@ Handles reading maintenance instructions and executing VM power sequences
 """
 
 import os
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import vm_info
 import power
 
@@ -76,10 +76,10 @@ def _extract_categories_from_sequence(sequence: list) -> Dict[str, list]:
     
     return categories
 
-def find_vms_by_category() -> Dict[str, Any]:
+def find_vms_by_category(instance: Optional[str] = None) -> Dict[str, Any]:
     """Find VMs and categorize them based on the maintenance instructions."""
     try:
-        all_vms = vm_info.list_vms()
+        all_vms = vm_info.list_vms(instance)
         
         # Parse VM names from the actual vCenter response format
         vm_names = []
@@ -134,15 +134,15 @@ def find_vms_by_category() -> Dict[str, Any]:
     except Exception as e:
         return {'error': f"Error categorizing VMs: {str(e)}"}
 
-def _execute_sequence(sequence_name: str, power_func) -> str:
+def _execute_sequence(sequence_name: str, power_func, instance: Optional[str] = None) -> str:
     """Execute a power sequence (up or down)."""
     try:
-        vm_data = find_vms_by_category()
+        vm_data = find_vms_by_category(instance)
         if 'error' in vm_data:
             return vm_data['error']
-        
+
         results = [f"Starting VM {sequence_name} sequence based on maintenance instructions..."]
-        
+
         for line in vm_data['parsed_instructions'][f'power_{sequence_name}_sequence']:
             if line.startswith(('1.', '2.', '3.')) and '**' in line:
                 category = line.split('**')[1].split('**')[0].lower().replace(' ', '_')
@@ -151,27 +151,27 @@ def _execute_sequence(sequence_name: str, power_func) -> str:
                     if vms:
                         results.append(f"\n{line}:")
                         for vm_name in vms:
-                            result = power_func(vm_name)
+                            result = power_func(vm_name, instance)
                             results.append(f"   - {vm_name}: {result}")
                     else:
                         results.append(f"\n{line}: No VMs found in this category")
-        
+
         return '\n'.join(results)
     except Exception as e:
         return f"Error executing {sequence_name} sequence: {str(e)}"
 
-def execute_power_down_sequence() -> str:
+def execute_power_down_sequence(instance: Optional[str] = None) -> str:
     """Execute the power-down sequence based on maintenance instructions."""
-    return _execute_sequence('down', power.power_off_vm)
+    return _execute_sequence('down', power.power_off_vm, instance)
 
-def execute_power_up_sequence() -> str:
+def execute_power_up_sequence(instance: Optional[str] = None) -> str:
     """Execute the power-up sequence based on maintenance instructions."""
-    return _execute_sequence('up', power.power_on_vm)
+    return _execute_sequence('up', power.power_on_vm, instance)
 
-def get_maintenance_plan() -> str:
+def get_maintenance_plan(instance: Optional[str] = None) -> str:
     """Get the maintenance plan showing what VMs will be affected."""
     try:
-        vm_data = find_vms_by_category()
+        vm_data = find_vms_by_category(instance)
         if 'error' in vm_data:
             return vm_data['error']
         

@@ -6,18 +6,19 @@ Handles VM listing and detailed information retrieval
 
 import os
 import requests
+from typing import Optional
 from pyVmomi import vim
 import connection
 
 
-def list_vms() -> str:
+def list_vms(instance: Optional[str] = None) -> str:
     """List all VMs using fast REST API."""
-    session_id = connection.get_vcenter_session()
+    session_id = connection.get_vcenter_session(instance)
     if not session_id:
         return "Error: Could not connect to vCenter"
-    
+
     try:
-        host = os.getenv('VCENTER_HOST')
+        host = connection.get_host(instance)
         headers = {'vmware-api-session-id': session_id}
         
         # Get VMs - this should be very fast
@@ -44,9 +45,9 @@ def list_vms() -> str:
         return f"Error: {e}"
 
 
-def get_vm_details(vm_name: str) -> str:
+def get_vm_details(vm_name: str, instance: Optional[str] = None) -> str:
     """Get detailed VM information using pyvmomi including IP addresses and network info."""
-    service_instance = connection.get_service_instance()
+    service_instance = connection.get_service_instance(instance)
     if not service_instance:
         return "Error: Could not connect to vCenter"
     
@@ -163,9 +164,9 @@ def get_vm_details(vm_name: str) -> str:
         return f"Error: {e}"
 
 
-def list_templates() -> str:
+def list_templates(instance: Optional[str] = None) -> str:
     """List all available templates."""
-    service_instance = connection.get_service_instance()
+    service_instance = connection.get_service_instance(instance)
     if not service_instance:
         return "Error: Could not connect to vCenter"
     
@@ -192,9 +193,9 @@ def list_templates() -> str:
         return f"Error: {e}"
 
 
-def list_datastores() -> str:
+def list_datastores(instance: Optional[str] = None) -> str:
     """List all available datastores."""
-    service_instance = connection.get_service_instance()
+    service_instance = connection.get_service_instance(instance)
     if not service_instance:
         return "Error: Could not connect to vCenter"
     
@@ -225,9 +226,9 @@ def list_datastores() -> str:
         return f"Error: {e}"
 
 
-def list_networks() -> str:
+def list_networks(instance: Optional[str] = None) -> str:
     """List all available networks."""
-    service_instance = connection.get_service_instance()
+    service_instance = connection.get_service_instance(instance)
     if not service_instance:
         return "Error: Could not connect to vCenter"
     

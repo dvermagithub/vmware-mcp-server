@@ -5,13 +5,14 @@ Handles VM power operations (power on, power off)
 """
 
 import sys
+from typing import Optional
 from pyVmomi import vim
 import connection
 
 
-def power_on_vm(vm_name: str) -> str:
+def power_on_vm(vm_name: str, instance: Optional[str] = None) -> str:
     """Power on a VM by name."""
-    service_instance = connection.get_service_instance()
+    service_instance = connection.get_service_instance(instance)
     if not service_instance:
         return "Error: Could not connect to vCenter"
     
@@ -46,9 +47,9 @@ def power_on_vm(vm_name: str) -> str:
         return f"Error: {e}"
 
 
-def power_off_vm(vm_name: str) -> str:
+def power_off_vm(vm_name: str, instance: Optional[str] = None) -> str:
     """Power off a VM by name."""
-    service_instance = connection.get_service_instance()
+    service_instance = connection.get_service_instance(instance)
     if not service_instance:
         return "Error: Could not connect to vCenter"
     
