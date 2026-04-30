@@ -232,6 +232,7 @@ def run_in_guest_via_vix(
     guest_password: Optional[str] = None,
     guest_profile: Optional[str] = None,
     fetch_log: bool = True,
+    report_dir: Optional[str] = None,
     timeout_seconds: int = 1800,
     instance: Optional[str] = None,
 ) -> str:
@@ -345,26 +346,33 @@ def run_in_guest_via_vix(
     else:
         lines.append(f"Exit code:    {exit_code}")
 
+    summary_text: Optional[str] = None
     if fetch_log:
         if guest_family == 'windowsGuest':
-            summary = _get_file_from_guest(
-                si, vm, auth,
-                'C:\\ProgramData\\ZertoMigrationPrep\\logs\\last-run-summary.json',
-                instance=instance,
-            )
-            if summary:
-                lines.append("---- last-run-summary.json ----")
-                lines.append(summary.strip())
+            summary_path = 'C:\\ProgramData\\ZertoMigrationPrep\\logs\\last-run-summary.json'
         else:
-            # Best-effort: read the most recent prep-linux.sh log. The Guest
-            # Ops API can only fetch single files, so we list the dir first
-            # via ProcessManager and then fetch the newest entry.
-            tail = _get_file_from_guest(
-                si, vm, auth, '/var/log/zerto-migration-prep/',
-                instance=instance,
-            )
-            if tail:
-                lines.append("---- /var/log/zerto-migration-prep ----")
-                lines.append(tail.strip())
+            summary_path = '/var/log/zerto-migration-prep/last-run-summary.json'
+
+        summary_text = _get_file_from_guest(
+            si, vm, auth, summary_path, instance=instance,
+        )
+        if summary_text:
+            lines.append(f"---- {summary_path} ----")
+            lines.append(summary_text.strip())
+        else:
+            lines.append(f"(no summary file at {summary_path})")
+
+    if report_dir and summary_text:
+        try:
+            out_dir = Path(report_dir)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            # Filename: <vm-name>-summary.json. Sanitise path separators so a
+            # weird VM name can't escape report_dir.
+            safe_name = vm_name.replace('/', '_').replace('\\', '_')
+            out_path = out_dir / f"{safe_name}-summary.json"
+            out_path.write_text(summary_text, encoding='utf-8')
+            lines.append(f"Saved summary -> {out_path}")
+        except Exception as e:
+            lines.append(f"(failed to save summary to report_dir: {e})")
 
     return "\n".join(lines)

@@ -170,6 +170,7 @@ def run_in_guest_via_vix(
     guest_password: Optional[str] = None,
     guest_profile: Optional[str] = None,
     fetch_log: bool = True,
+    report_dir: Optional[str] = None,
     timeout_seconds: int = 1800,
     instance: Optional[str] = None,
 ) -> str:
@@ -179,9 +180,13 @@ def run_in_guest_via_vix(
     Windows, root/sudoer on Linux). Guest creds are taken from
     guest_username/guest_password if provided, otherwise from .env
     (GUEST_USERNAME_WINDOWS/_LINUX or _<PROFILE> variants). When fetch_log is
-    true, the function tries to pull back the Zerto migration prep
-    last-run-summary.json (Windows) or log dir (Linux). Optionally target a
-    specific vCenter instance."""
+    true, pulls back last-run-summary.json from the guest
+    (C:\\ProgramData\\ZertoMigrationPrep\\logs\\ on Windows,
+    /var/log/zerto-migration-prep/ on Linux) and embeds it in the response.
+    When report_dir is set, also saves the summary to
+    <report_dir>/<vm-name>-summary.json on the MCP server's filesystem so
+    a fleet run can accumulate one JSON per host for downstream reporting.
+    Optionally target a specific vCenter instance."""
     return guest_ops.run_in_guest_via_vix(
         vm_name=vm_name,
         script_path=script_path,
@@ -190,6 +195,7 @@ def run_in_guest_via_vix(
         guest_password=guest_password,
         guest_profile=guest_profile,
         fetch_log=fetch_log,
+        report_dir=report_dir,
         timeout_seconds=timeout_seconds,
         instance=instance,
     )
