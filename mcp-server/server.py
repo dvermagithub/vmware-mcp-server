@@ -20,6 +20,7 @@ import host_info
 import maintenance
 import connection
 import guest_ops
+import migration
 
 # Load .env from the repo root (one level up from mcp-server/)
 env_path = Path(__file__).parent.parent / ".env"
@@ -198,6 +199,42 @@ def run_in_guest_via_vix(
         report_dir=report_dir,
         timeout_seconds=timeout_seconds,
         instance=instance,
+    )
+
+# Migration Eligibility Tools
+@mcp.tool()
+def check_migration_eligibility(
+    vm_name: str,
+    min_hw_version: int = 13,
+    instance: Optional[str] = None,
+) -> str:
+    """Check whether a VM can be migrated from VMware to a KVM/HVM target by
+    applying hard-blocker rules (encryption, vTPM, PCI passthrough, NVDIMM,
+    Fault Tolerance, physical-mode RDM, multi-writer disks, missing VMware
+    Tools) and surfacing soft warnings (snapshots, independent disks, secure
+    boot, BIOS firmware, hardware version below floor, powered-off state).
+    Returns eligible: true/false plus blockers and warnings. Optionally
+    target a specific vCenter instance."""
+    return migration.check_migration_eligibility(
+        vm_name=vm_name,
+        min_hw_version=min_hw_version,
+        instance=instance,
+    )
+
+@mcp.tool()
+def check_migration_eligibility_bulk(
+    instance: Optional[str] = None,
+    min_hw_version: int = 13,
+    only_ineligible: bool = False,
+) -> str:
+    """Apply migration eligibility rules across every (non-template) VM in the
+    targeted vCenter. Returns a fleet summary showing eligible vs blocked
+    counts and one line per VM with its blockers / warnings. Set
+    only_ineligible=true to filter the listing to blocked VMs only."""
+    return migration.check_migration_eligibility_bulk(
+        instance=instance,
+        min_hw_version=min_hw_version,
+        only_ineligible=only_ineligible,
     )
 
 if __name__ == "__main__":
