@@ -45,31 +45,82 @@ def list_vms(instance: Optional[str] = None) -> str:
         return f"Error: {e}"
 
 
+def _count_snapshots(snap_tree) -> int:
+    """Recursively count snapshots in a vim.vm.SnapshotTree list."""
+    if not snap_tree:
+        return 0
+    total = 0
+    for s in snap_tree:
+        total += 1
+        total += _count_snapshots(getattr(s, 'childSnapshotList', None))
+    return total
+
+
+def _scan_devices_and_disks(vm) -> dict:
+    """One pass over hardware devices to extract migration-eligibility signals."""
+    out = {
+        'vtpm': False,
+        'pci_passthrough_count': 0,
+        'nvdimm_count': 0,
+        'physical_rdm_count': 0,
+        'multi_writer_disk_count': 0,
+        'independent_disk_count': 0,
+    }
+    if not (vm.config and vm.config.hardware and vm.config.hardware.device):
+        return out
+
+    for d in vm.config.hardware.device:
+        # vTPM
+        if isinstance(d, vim.vm.device.VirtualTPM):
+            out['vtpm'] = True
+        # PCI passthrough (vGPU + raw PCI devices share the parent type in pyVmomi)
+        if isinstance(d, vim.vm.device.VirtualPCIPassthrough):
+            out['pci_passthrough_count'] += 1
+        # NVDIMM / persistent memory
+        if isinstance(d, getattr(vim.vm.device, 'VirtualNVDIMM', tuple())):
+            out['nvdimm_count'] += 1
+        # Disk-specific signals
+        if isinstance(d, vim.vm.device.VirtualDisk):
+            backing = getattr(d, 'backing', None)
+            if backing is not None:
+                # Physical-mode RDM
+                if getattr(backing, 'compatibilityMode', None) == 'physicalMode':
+                    out['physical_rdm_count'] += 1
+                # Multi-writer shared disk
+                if getattr(backing, 'sharing', None) == 'sharingMultiWriter':
+                    out['multi_writer_disk_count'] += 1
+                # Independent disk modes break consistent replication
+                disk_mode = getattr(backing, 'diskMode', '')
+                if disk_mode in ('independent_persistent', 'independent_nonpersistent'):
+                    out['independent_disk_count'] += 1
+    return out
+
+
 def get_vm_details(vm_name: str, instance: Optional[str] = None) -> str:
     """Get detailed VM information using pyvmomi including IP addresses and network info."""
     service_instance = connection.get_service_instance(instance)
     if not service_instance:
         return "Error: Could not connect to vCenter"
-    
+
     try:
         content = service_instance.RetrieveContent()
         container = content.viewManager.CreateContainerView(
             content.rootFolder, [vim.VirtualMachine], True
         )
-        
+
         vm = None
         for v in container.view:
             if v.name == vm_name:
                 vm = v
                 break
-        
+
         if not vm:
             return f"VM '{vm_name}' not found"
-        
+
         # Basic VM info
         memory_mb = vm.config.hardware.memoryMB if vm.config and vm.config.hardware else 0
         memory_gb = round(memory_mb / 1024, 1) if memory_mb else 0
-        
+
         details = {
             'name': vm.name,
             'power_state': vm.runtime.powerState,
@@ -80,6 +131,28 @@ def get_vm_details(vm_name: str, instance: Optional[str] = None) -> str:
             'version': vm.config.version if vm.config else 'N/A',
             'template': vm.config.template if vm.config else False
         }
+
+        # --- Migration eligibility signals (raw fields; rules applied by
+        # check_migration_eligibility tool) -------------------------------
+        # vSphere VM Encryption: keyId is set when the VM is encrypted.
+        details['encrypted'] = bool(vm.config and getattr(vm.config, 'keyId', None) is not None)
+
+        # Firmware + secure boot
+        firmware = getattr(vm.config, 'firmware', None) if vm.config else None
+        details['firmware'] = firmware or 'unknown'
+        boot_options = getattr(vm.config, 'bootOptions', None) if vm.config else None
+        details['secure_boot'] = bool(boot_options and getattr(boot_options, 'efiSecureBootEnabled', False))
+
+        # Snapshots present at cutover are a Zerto problem.
+        details['snapshot_count'] = _count_snapshots(
+            vm.snapshot.rootSnapshotList if vm.snapshot else None
+        )
+
+        # Fault Tolerance state -- 'notConfigured' is the migrate-friendly value.
+        details['fault_tolerance_state'] = getattr(vm.runtime, 'faultToleranceState', 'unknown')
+
+        # Hardware-device signals (vTPM, PCI passthrough, NVDIMM, RDM, multi-writer, independent disks)
+        details.update(_scan_devices_and_disks(vm))
         
         # Get IP addresses and network info
         if vm.guest and vm.guest.net:
@@ -150,6 +223,9 @@ def get_vm_details(vm_name: str, instance: Optional[str] = None) -> str:
         result += f"- CPU Count: {details['cpu_count']}\n"
         result += f"- Memory: {details['memory_gb']} GB ({details['memory_mb']} MB)\n"
         result += f"- Guest OS: {details['guest_id']}\n"
+        result += f"- Hardware Version: {details['version']}\n"
+        result += f"- Firmware: {details['firmware']}\n"
+        result += f"- Secure Boot: {details['secure_boot']}\n"
         result += f"- VMware Tools: {details['vmware_tools']}\n"
         result += f"- IP Addresses: {details['ip_addresses']}\n"
         result += f"- Network Adapters: {details['network_adapters']}\n"
@@ -157,7 +233,17 @@ def get_vm_details(vm_name: str, instance: Optional[str] = None) -> str:
         result += f"- Resource Pool: {details['resource_pool']}\n"
         result += f"- Folder: {details['folder']}\n"
         result += f"- Template: {details['template']}\n"
-        
+        result += "\nMigration-eligibility signals:\n"
+        result += f"- Encrypted (vSphere VM Encryption): {details['encrypted']}\n"
+        result += f"- Snapshots Present: {details['snapshot_count']}\n"
+        result += f"- Fault Tolerance: {details['fault_tolerance_state']}\n"
+        result += f"- vTPM Attached: {details['vtpm']}\n"
+        result += f"- PCI Passthrough Devices: {details['pci_passthrough_count']}\n"
+        result += f"- NVDIMM Devices: {details['nvdimm_count']}\n"
+        result += f"- Physical-mode RDM Disks: {details['physical_rdm_count']}\n"
+        result += f"- Multi-writer Shared Disks: {details['multi_writer_disk_count']}\n"
+        result += f"- Independent Disks: {details['independent_disk_count']}\n"
+
         return result
         
     except Exception as e:
