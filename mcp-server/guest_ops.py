@@ -351,7 +351,10 @@ def run_in_guest_via_vix(
         if guest_family == 'windowsGuest':
             summary_path = 'C:\\ProgramData\\ZertoMigrationPrep\\logs\\last-run-summary.json'
         else:
-            summary_path = '/var/log/zerto-migration-prep/last-run-summary.json'
+            # Read the world-readable mirror in /tmp so the unprivileged
+            # guest user used by Guest Ops can fetch it. The canonical
+            # /var/log copy stays 0600.
+            summary_path = '/tmp/zerto-migration-prep-summary.json'
 
         summary_text = _get_file_from_guest(
             si, vm, auth, summary_path, instance=instance,
