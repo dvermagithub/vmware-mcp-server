@@ -197,22 +197,29 @@ def run_in_guest_via_vix(
     guest_profile: Optional[str] = None,
     fetch_log: bool = True,
     report_dir: Optional[str] = None,
+    use_sudo: bool = True,
     timeout_seconds: int = 1800,
     instance: Optional[str] = None,
 ) -> str:
     """Upload and run a local .ps1 or .sh script inside a VMware guest via the
     vCenter Guest Operations API (no SSH/WinRM/PSExec). Requires VMware Tools
-    running in the guest plus a privileged guest OS account (Administrator on
-    Windows, root/sudoer on Linux). Guest creds are taken from
+    running in the guest plus a privileged guest OS account: Administrator on
+    Windows; on Linux, a service account (default 'zerto') with NOPASSWD sudo
+    for /bin/bash on the prep script. Guest creds are taken from
     guest_username/guest_password if provided, otherwise from .env
     (GUEST_USERNAME_WINDOWS/_LINUX or _<PROFILE> variants). When fetch_log is
     true, pulls back last-run-summary.json from the guest
     (C:\\ProgramData\\ZertoMigrationPrep\\logs\\ on Windows,
-    /var/log/zerto-migration-prep/ on Linux) and embeds it in the response.
-    When report_dir is set, also saves the summary to
+    /tmp/zerto-migration-prep-summary.json on Linux) and embeds it in the
+    response. When report_dir is set, also saves the summary to
     <report_dir>/<vm-name>-summary.json on the MCP server's filesystem so
-    a fleet run can accumulate one JSON per host for downstream reporting.
-    Optionally target a specific vCenter instance."""
+    a fleet run can accumulate one JSON per host. use_sudo (default True)
+    applies only to Linux: when true, the script is invoked via
+    /usr/bin/sudo so the script can install packages and rebuild initramfs
+    without authenticating as root directly. The candidate VM must have
+    /etc/sudoers.d/zerto-migration-prep installed -- see
+    docs/linux-sudoer-setup.md in the prep repo. Optionally target a
+    specific vCenter instance."""
     return guest_ops.run_in_guest_via_vix(
         vm_name=vm_name,
         script_path=script_path,
@@ -222,6 +229,7 @@ def run_in_guest_via_vix(
         guest_profile=guest_profile,
         fetch_log=fetch_log,
         report_dir=report_dir,
+        use_sudo=use_sudo,
         timeout_seconds=timeout_seconds,
         instance=instance,
     )

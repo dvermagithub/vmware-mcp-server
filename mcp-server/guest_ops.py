@@ -97,15 +97,30 @@ def _build_command(
     guest_family: str,
     remote_script_path: str,
     extra_args: str,
+    use_sudo: bool = True,
 ) -> Tuple[str, str]:
-    """Return (program_path, arguments) for StartProgramInGuest."""
+    """Return (program_path, arguments) for StartProgramInGuest.
+
+    On Linux, use_sudo=True (default) wraps the bash invocation in
+    /usr/bin/sudo so the script gets root privileges via NOPASSWD sudoers
+    instead of authenticating as root directly. On Windows the parameter
+    is ignored -- privilege model is "user is in Administrators group",
+    not per-call escalation.
+    """
     if guest_family == 'windowsGuest':
         return (
             'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
             f'-NoProfile -NonInteractive -ExecutionPolicy Bypass '
             f'-File "{remote_script_path}" {extra_args}'.strip()
         )
-    # Linux / other POSIX
+    # Linux / other POSIX. With sudo: the program path is /usr/bin/sudo and
+    # /bin/bash becomes the first argument. Without sudo: invoke bash
+    # directly (caller authenticated as root).
+    if use_sudo:
+        return (
+            '/usr/bin/sudo',
+            f'-n /bin/bash "{remote_script_path}" {extra_args}'.strip()
+        )
     return ('/bin/bash', f'"{remote_script_path}" {extra_args}'.strip())
 
 
@@ -233,6 +248,7 @@ def run_in_guest_via_vix(
     guest_profile: Optional[str] = None,
     fetch_log: bool = True,
     report_dir: Optional[str] = None,
+    use_sudo: bool = True,
     timeout_seconds: int = 1800,
     instance: Optional[str] = None,
 ) -> str:
@@ -317,7 +333,7 @@ def run_in_guest_via_vix(
         return f"Error: failed to upload script to guest: {e}"
 
     # Build and start the process.
-    program_path, arguments = _build_command(guest_family, remote_script, args)
+    program_path, arguments = _build_command(guest_family, remote_script, args, use_sudo=use_sudo)
     spec = vim.vm.guest.ProcessManager.ProgramSpec(
         programPath=program_path,
         arguments=arguments,

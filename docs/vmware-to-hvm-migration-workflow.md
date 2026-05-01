@@ -23,19 +23,27 @@ The following must already be in place before this workflow runs:
 1. The candidate VM is **already replicating from VMware to HVM**
    via an existing Zerto VPG. This pre-existing replication is the
    foundation; the workflow does not create it.
-2. `.env` for vmware-mcp-server has guest credentials with
-   Administrator (Windows) or root (Linux) inside the guest:
-   - `GUEST_USERNAME_WINDOWS` / `GUEST_PASSWORD_WINDOWS`
-   - `GUEST_USERNAME_LINUX` / `GUEST_PASSWORD_LINUX`
-3. `report_dir` is set to a stable local path on the MCP server (your
+2. `.env` for vmware-mcp-server has guest credentials:
+   - `GUEST_USERNAME_WINDOWS` / `GUEST_PASSWORD_WINDOWS` — local
+     Administrator on Windows VMs.
+   - `GUEST_USERNAME_LINUX` / `GUEST_PASSWORD_LINUX` — the `zerto`
+     service account on Linux VMs (NOT root).
+3. Linux candidate VMs have the `zerto` service account AND
+   `/etc/sudoers.d/zerto-migration-prep` installed for NOPASSWD sudo
+   on `prep-linux.sh`. See
+   [`docs/linux-sudoer-setup.md`](https://github.com/dvermagithub/zerto-hvm-migration-prep/blob/master/docs/linux-sudoer-setup.md)
+   in the prep repo for the sudoers contents and a sample Ansible
+   task. If a VM doesn't have this and an admin can't add it,
+   migration of that VM is blocked at Stage 4.
+4. `report_dir` is set to a stable local path on the MCP server (your
    workstation or wherever vmware-mcp-server runs) so per-VM JSON
    summaries accumulate (e.g. `C:\reports\zerto-prep`).
-4. For Windows VMs: a virtio-win ISO is available in a vCenter Content
+5. For Windows VMs: a virtio-win ISO is available in a vCenter Content
    Library, accessible by `mount_content_library_iso` (e.g. item name
    `virtio-win-0.1.285`).
-5. ZertoMCP and Morpheus MCP are configured in
+6. ZertoMCP and Morpheus MCP are configured in
    `claude_desktop_config.json` and reachable.
-6. The Zerto **failover-test network** is isolated from production
+7. The Zerto **failover-test network** is isolated from production
    (different portgroup / test VLAN). Loopback failover-test would
    otherwise collide with the live VM's hostname / IP / MAC on AD/DNS.
 
