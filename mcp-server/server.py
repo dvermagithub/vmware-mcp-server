@@ -21,6 +21,7 @@ import maintenance
 import connection
 import guest_ops
 import migration
+import vm_devices
 
 # Load .env from the repo root (one level up from mcp-server/)
 env_path = Path(__file__).parent.parent / ".env"
@@ -95,6 +96,30 @@ def create_vm_custom(template_name: str, new_vm_name: str, ip_address: str = "19
         datastore_name=datastore_name,
         instance=instance,
     )
+
+# VM Device Tools
+@mcp.tool()
+def mount_iso_to_vm(vm_name: str, datastore: str, iso_path: str,
+                    instance: Optional[str] = None) -> str:
+    """Mount an ISO image to a VM's CD/DVD drive. `datastore` is the datastore name (use list_datastores to discover); `iso_path` is the path inside that datastore (e.g. 'isos/ubuntu-22.04.iso'). Works on both powered-on and powered-off VMs. If the VM has no CD/DVD drive, one is added on a free IDE slot. Optionally target a specific vCenter instance."""
+    return vm_devices.mount_iso_to_vm(vm_name, datastore, iso_path, instance)
+
+@mcp.tool()
+def unmount_iso_from_vm(vm_name: str, instance: Optional[str] = None) -> str:
+    """Unmount the ISO currently attached to a VM's CD/DVD drive (switches the backing to client-device passthrough and disconnects). Works on both powered-on and powered-off VMs. Optionally target a specific vCenter instance."""
+    return vm_devices.unmount_iso_from_vm(vm_name, instance)
+
+@mcp.tool()
+def list_content_library_isos(instance: Optional[str] = None) -> str:
+    """List all ISO items in every vCenter content library, with their library, item name, file name, and size. Use this to discover what's available before calling mount_content_library_iso. Optionally target a specific vCenter instance."""
+    return vm_devices.list_content_library_isos(instance)
+
+@mcp.tool()
+def mount_content_library_iso(vm_name: str, item_name: str,
+                              library_name: Optional[str] = None,
+                              instance: Optional[str] = None) -> str:
+    """Mount an ISO from a vCenter content library to a VM by item name (e.g. 'virtio-win-0.1.285'). Resolves the backing datastore path automatically. If multiple libraries contain an item with the same name, pass library_name to disambiguate. Works on both powered-on and powered-off VMs. Optionally target a specific vCenter instance."""
+    return vm_devices.mount_content_library_iso(vm_name, item_name, library_name, instance)
 
 # Host Information Tools
 @mcp.tool()
