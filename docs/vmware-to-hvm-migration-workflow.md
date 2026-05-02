@@ -30,11 +30,17 @@ The following must already be in place before this workflow runs:
      service account on Linux VMs (NOT root).
 3. Linux candidate VMs have the `zerto` service account AND
    `/etc/sudoers.d/zerto-migration-prep` installed for NOPASSWD sudo
-   on `prep-linux.sh`. See
-   [`docs/linux-sudoer-setup.md`](https://github.com/dvermagithub/zerto-hvm-migration-prep/blob/master/docs/linux-sudoer-setup.md)
-   in the prep repo for the sudoers contents and a sample Ansible
-   task. If a VM doesn't have this and an admin can't add it,
-   migration of that VM is blocked at Stage 4.
+   on `prep-linux.sh`. The simplest way to provision this is the
+   one-line bootstrap:
+   ```
+   curl -fsSL https://raw.githubusercontent.com/dvermagithub/zerto-hvm-migration-prep/master/setup-zerto-account.sh | sudo bash
+   ```
+   Customer-facing instructions:
+   [`docs/customer-onboarding-linux.md`](https://github.com/dvermagithub/zerto-hvm-migration-prep/blob/master/docs/customer-onboarding-linux.md).
+   Security-review reference:
+   [`docs/linux-sudoer-setup.md`](https://github.com/dvermagithub/zerto-hvm-migration-prep/blob/master/docs/linux-sudoer-setup.md).
+   If a VM doesn't have this and an admin can't add it, migration of
+   that VM is blocked at Stage 4.
 4. `report_dir` is set to a stable local path on the MCP server (your
    workstation or wherever vmware-mcp-server runs) so per-VM JSON
    summaries accumulate (e.g. `C:\reports\zerto-prep`).
