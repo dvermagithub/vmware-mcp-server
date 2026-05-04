@@ -182,48 +182,61 @@ def unmount_iso_from_vm(vm_name: str, instance: Optional[str] = None) -> str:
         return f"Error: {e}"
 
 
-def _cl_get(host: str, session_id: str, path: str) -> Any:
+def _cl_request(method: str, host: str, instance: Optional[str], path: str,
+                body: Optional[dict] = None) -> Any:
+    """REST helper that retries once with a fresh session on 401."""
     url = f"https://{host}/api{path}"
-    r = requests.get(
-        url, headers={"vmware-api-session-id": session_id},
-        verify=False, timeout=15,
-    )
-    r.raise_for_status()
-    body = r.json()
-    return body.get("value", body) if isinstance(body, dict) else body
+    for force_refresh in (False, True):
+        session_id = connection.get_vcenter_session(instance, force_refresh=force_refresh)
+        if not session_id:
+            raise RuntimeError("Could not establish vCenter REST session")
+        headers = {"vmware-api-session-id": session_id}
+        if method == "GET":
+            r = requests.get(url, headers=headers, verify=False, timeout=15)
+        elif method == "POST":
+            r = requests.post(url, headers=headers, json=body, verify=False, timeout=30)
+        else:
+            raise ValueError(f"Unsupported method {method}")
+
+        if r.status_code == 401 and not force_refresh:
+            connection.invalidate_session(instance)
+            continue
+
+        r.raise_for_status()
+        if not r.text:
+            return None
+        parsed = r.json()
+        return parsed.get("value", parsed) if isinstance(parsed, dict) else parsed
+    raise RuntimeError("REST call failed even after re-authenticating")
 
 
-def _cl_post(host: str, session_id: str, path: str, body: Optional[dict] = None) -> Any:
-    url = f"https://{host}/api{path}"
-    r = requests.post(
-        url, headers={"vmware-api-session-id": session_id},
-        json=body, verify=False, timeout=30,
-    )
-    r.raise_for_status()
-    if not r.text:
-        return None
-    parsed = r.json()
-    return parsed.get("value", parsed) if isinstance(parsed, dict) else parsed
+def _cl_get(host: str, instance: Optional[str], path: str) -> Any:
+    return _cl_request("GET", host, instance, path)
 
 
-def _cl_iter_iso_items(host: str, session_id: str,
+def _cl_post(host: str, instance: Optional[str], path: str,
+             body: Optional[dict] = None) -> Any:
+    return _cl_request("POST", host, instance, path, body)
+
+
+def _cl_iter_iso_items(host: str, instance: Optional[str],
                        library_filter: Optional[str] = None) -> List[Dict[str, Any]]:
     """Return a list of {library, library_id, item, item_id, file_name, size}
     for every ISO file in every (matching) content library."""
-    library_ids = _cl_get(host, session_id, "/content/library")
+    library_ids = _cl_get(host, instance, "/content/library")
     results: List[Dict[str, Any]] = []
     for lib_id in library_ids:
-        lib = _cl_get(host, session_id, f"/content/library/{lib_id}")
+        lib = _cl_get(host, instance, f"/content/library/{lib_id}")
         lib_name = lib.get("name", lib_id)
         if library_filter and lib_name != library_filter:
             continue
-        item_ids = _cl_get(host, session_id, f"/content/library/item?library_id={lib_id}")
+        item_ids = _cl_get(host, instance, f"/content/library/item?library_id={lib_id}")
         for item_id in item_ids:
-            item = _cl_get(host, session_id, f"/content/library/item/{item_id}")
+            item = _cl_get(host, instance, f"/content/library/item/{item_id}")
             if (item.get("type") or "").lower() != "iso":
                 continue
             try:
-                files = _cl_get(host, session_id, f"/content/library/item/{item_id}/file")
+                files = _cl_get(host, instance, f"/content/library/item/{item_id}/file")
             except Exception:
                 files = []
             iso_file = next(
@@ -244,12 +257,11 @@ def _cl_iter_iso_items(host: str, session_id: str,
 def list_content_library_isos(instance: Optional[str] = None) -> str:
     """List all ISO items across every content library on the targeted vCenter."""
     host = connection.get_host(instance)
-    session_id = connection.get_vcenter_session(instance)
-    if not host or not session_id:
-        return "Error: Could not establish vCenter REST session"
+    if not host:
+        return "Error: Could not resolve vCenter host"
 
     try:
-        items = _cl_iter_iso_items(host, session_id)
+        items = _cl_iter_iso_items(host, instance)
     except Exception as e:
         return f"Error listing content library ISOs: {e}"
 
@@ -277,12 +289,11 @@ def mount_content_library_iso(vm_name: str, item_name: str,
     powered-on and powered-off VMs.
     """
     host = connection.get_host(instance)
-    session_id = connection.get_vcenter_session(instance)
-    if not host or not session_id:
-        return "Error: Could not establish vCenter REST session"
+    if not host:
+        return "Error: Could not resolve vCenter host"
 
     try:
-        items = _cl_iter_iso_items(host, session_id, library_filter=library_name)
+        items = _cl_iter_iso_items(host, instance, library_filter=library_name)
     except Exception as e:
         return f"Error listing content library ISOs: {e}"
 
@@ -299,7 +310,7 @@ def mount_content_library_iso(vm_name: str, item_name: str,
     # Resolve the actual datastore path for the library item via the storage API.
     try:
         raw_storage = _cl_get(
-            host, session_id,
+            host, instance,
             f"/content/library/item/{item_id}/storage",
         )
     except Exception as e:

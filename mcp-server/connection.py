@@ -98,7 +98,10 @@ def connect_to_vcenter(instance: Optional[str] = None) -> bool:
     cached = _service_instances.get(name)
     if cached:
         try:
-            cached.RetrieveContent()
+            # currentTime() forces a real round-trip and surfaces an idle-timed-out
+            # session as an exception, where RetrieveContent() can return a stale
+            # cached object without hitting the wire.
+            cached.CurrentTime()
             return True
         except Exception:
             _service_instances.pop(name, None)
@@ -135,37 +138,78 @@ def get_service_instance(instance: Optional[str] = None):
     return None
 
 
-def get_vcenter_session(instance: Optional[str] = None) -> Optional[str]:
-    """Get a vCenter REST API session id for an instance (cached)."""
+def _rest_session_alive(host: str, session_id: str) -> bool:
+    """Cheap GET against the session endpoint — 200 if alive, 401 if expired."""
+    try:
+        r = requests.get(
+            f"https://{host}/rest/com/vmware/cis/session",
+            headers={"vmware-api-session-id": session_id},
+            verify=False, timeout=5,
+        )
+        return r.status_code == 200
+    except Exception:
+        return False
+
+
+def _create_rest_session(host: str, user: str, password: str) -> Optional[str]:
+    try:
+        r = requests.post(
+            f"https://{host}/rest/com/vmware/cis/session",
+            auth=(user, password), verify=False, timeout=5,
+        )
+        if r.status_code == 200:
+            return r.json().get("value")
+        print(f"Failed to create REST session: {r.status_code} {r.text[:200]}",
+              file=sys.stderr)
+        return None
+    except Exception as e:
+        print(f"Session error: {e}", file=sys.stderr)
+        return None
+
+
+def get_vcenter_session(instance: Optional[str] = None,
+                        force_refresh: bool = False) -> Optional[str]:
+    """Get a vCenter REST API session id for an instance.
+
+    Validates the cached session against vCenter on every call; if the cached
+    session has expired (idle > server timeout) it is silently re-created.
+    Pass `force_refresh=True` to skip the cache and re-login unconditionally
+    (use this from a caller that just got a 401 to recover in one round-trip).
+    """
     try:
         name = _resolve_instance(instance)
     except ValueError as e:
         print(str(e), file=sys.stderr)
         return None
 
-    if name in _rest_sessions:
-        return _rest_sessions[name]
-
     creds = _creds_for(name)
     host, user, password = creds['host'], creds['user'], creds['password']
     if not all([host, user, password]):
         return None
 
+    if not force_refresh:
+        cached = _rest_sessions.get(name)
+        if cached and _rest_session_alive(host, cached):
+            return cached
+        if cached:
+            _rest_sessions.pop(name, None)
+
+    session_id = _create_rest_session(host, user, password)
+    if session_id:
+        _rest_sessions[name] = session_id
+    return session_id
+
+
+def invalidate_session(instance: Optional[str] = None) -> None:
+    """Drop both cached SOAP and REST sessions for an instance so the next
+    call re-authenticates. Callers should invoke this on a 401 from any
+    REST tool, or when SOAP raises a not-authenticated fault."""
     try:
-        session_url = f"https://{host}/rest/com/vmware/cis/session"
-        response = requests.post(
-            session_url, auth=(user, password), verify=False, timeout=5
-        )
-        if response.status_code == 200:
-            session_id = response.json()['value']
-            _rest_sessions[name] = session_id
-            return session_id
-        print(f"Failed to create REST session for '{name}': {response.status_code}",
-              file=sys.stderr)
-        return None
-    except Exception as e:
-        print(f"Session error for '{name}': {e}", file=sys.stderr)
-        return None
+        name = _resolve_instance(instance)
+    except ValueError:
+        return
+    _service_instances.pop(name, None)
+    _rest_sessions.pop(name, None)
 
 
 def disconnect_vcenter(instance: Optional[str] = None) -> None:
