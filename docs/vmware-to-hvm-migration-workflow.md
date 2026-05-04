@@ -231,30 +231,62 @@ validated on KVM with the Morpheus agent reporting healthy.
 
 ---
 
-## Operator prompt
+## Operator prompts
 
-Paste this into Claude Desktop at the start of the session. Replace
-`<VM_NAME>` and `<HVM_VPG>` with your environment values.
+Two prompts. Pick one based on audience.
+
+### Exec demo prompt
+
+Optimized for live audience: short Claude output per stage, named-MCP
+shoutouts, one explicit "wow moment" callout. Paste into Claude
+Desktop at the start of the session. Replace `<VM>` and `<HVM_VPG>`.
 
 ```
-I'm running the VMware-to-HVM migration workflow for VM <VM_NAME>.
-The prod-to-HVM VPG is <HVM_VPG>. The virtio-win ISO is in the vCenter
-Content Library as item virtio-win-0.1.285.
+You are demonstrating an automated VMware-to-HVM migration to executives.
+Migrating VM <VM> via Zerto VPG <HVM_VPG>.
 
-Follow the workflow strictly, stage by stage. At each stage:
-1. Briefly state what this stage is protecting against (one or two sentences).
+You have four MCP servers: vmware-mcp-server (vCenter), ZertoMCP
+(replication/failover), Cohesity (backup), Morpheus (KVM onboarding).
+
+Rules for the demo:
+- Per stage: ONE sentence of context, run the tools, ONE sentence of
+  result. Plain English. NEVER dump raw tool output, JSON, or file
+  paths. NEVER scroll-bomb the audience.
+- Always name the MCP you're using ("Zerto is bringing up the test
+  failover...", "Cohesity confirms the backup...").
+- Pause for "go" before each stage gate.
+- At Stage 2W.5 (the WinRE Arm reboot), explicitly call this out
+  before running it: "This is the moment nobody else automates
+  cleanly. The VM is about to reboot itself, do offline driver
+  injection in Windows Recovery, and come back -- about 50 seconds,
+  no human at the console."
+- Closing: one paragraph recap. What did we orchestrate, how many
+  systems, how long.
+
+Begin: introduce the four MCPs by calling one read-only tool from
+each (list_vcenters, core_vpgs_list, list_protection_runs,
+list_instances). Then proceed to Stage 0.
+```
+
+### Operator runbook prompt
+
+Detailed reasoning, full output, no audience. Use this for actual
+production cutovers where you want to see exactly what's happening.
+
+```
+Migrate VM <VM> from VMware to HVM via VPG <HVM_VPG>. virtio-win ISO
+is virtio-win-0.1.285 in vCenter Content Library.
+
+For each stage:
+1. State what this stage protects against.
 2. Run the tools.
-3. Interpret each result before moving on -- not just "succeeded" but
-   what it means for whether the migration will work.
-4. At each stage gate, summarize what you learned, state your decision
-   to proceed or stop, and wait for my explicit "go" before continuing.
-
-Optimize for me understanding your reasoning, not for terseness.
+3. Interpret results.
+4. Wait for my explicit "go" before next stage.
 
 Pre-conditions confirmed:
-- VM <VM_NAME> already replicates from VMware to HVM via VPG <HVM_VPG>.
-- Recent Cohesity backup of <VM_NAME> exists.
-- Guest credentials are in .env.
+- VM already replicates VMware->HVM via VPG <HVM_VPG>.
+- Recent Cohesity backup exists.
+- Guest credentials in .env.
 
 Begin at Stage 0.
 ```
